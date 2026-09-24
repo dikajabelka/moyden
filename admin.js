@@ -250,7 +250,7 @@ function addFiles(files, preset){
     const it = {id: ++qid, file: f, ext, url: URL.createObjectURL(f),
       word: row ? row["слово"] : (preset ? p.word : (/^(img|image|photo|dsc|screenshot|снимок)/i.test(p.word) ? "" : p.word)),
       variant: p.variant, style: p.style,
-      n: p.n, mode: preset && preset.mode || "", newCat: "", newTags: "", newVariants: ""};
+      n: p.n, mode: preset && preset.mode || "", newCat: "", catSel: "", newCatName: "", newTags: "", newVariants: ""};
     if (row && !it.variant && onlyNoPeople(row)) it.variant = "без людей";
     Q.push(it);
   }
@@ -264,7 +264,7 @@ function check(it, idx){
   if (!it.word.trim()){ r.msg = "Впишите слово — какая это картинка."; return r; }
   const row = DIDX.get(norm(it.word));
   r.isNew = !row;
-  if (r.isNew && !it.newCat.trim()){ r.msg = "Нового слова нет в словаре — выберите категорию ниже."; r.cls = "warn"; return r; }
+  if (r.isNew && !it.newCat.trim()){ r.msg = it.catSel === "__new" ? "Впишите название новой категории." : "Нового слова нет в словаре — выберите категорию ниже."; r.cls = "warn"; return r; }
   const needPeople = row ? !onlyNoPeople(row) : (it.newVariants || "девочка, мальчик") !== "без людей";
   if (!it.variant && !needPeople) it.variant = "без людей";
   if (!it.variant && needPeople){ r.msg = "Выберите, кто на картинке."; r.cls = "warn"; return r; }
@@ -289,48 +289,78 @@ function check(it, idx){
 }
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
+/* все категории: из словаря + новые, придуманные в этой загрузке */
+function allCats(){
+  const extra = Q.filter(x => x.catSel === "__new" && x.newCatName.trim()).map(x => x.newCatName.trim().toLowerCase());
+  return [...new Set([...CATS, ...extra])].sort((a, b) => a.localeCompare(b, "ru"));
+}
+function syncCat(it){ it.newCat = it.catSel === "__new" ? it.newCatName.trim().toLowerCase() : (it.catSel || ""); }
+
+function catBlock(it){
+  const cats = allCats();
+  return `<label class="f">Категория</label>
+    <select data-k="catSel">
+      <option value="" ${!it.catSel ? "selected" : ""}>— выберите —</option>
+      ${cats.map(c => `<option value="${esc(c)}" ${it.catSel === c ? "selected" : ""}>${esc(cap(c))}</option>`).join("")}
+      <option value="__new" ${it.catSel === "__new" ? "selected" : ""}>➕ Новая категория…</option>
+    </select>
+    ${it.catSel === "__new" ? `<input type="text" data-k="newCatName" value="${esc(it.newCatName)}"
+        placeholder="Название, например: праздники" style="margin-top:6px" autocomplete="off">
+      <div class="muted" style="font-size:12px;margin-top:3px">Новая категория появится на сайте после загрузки.</div>` : ""}`;
+}
+
 function renderQueue(){
   const box = $("queue");
   box.innerHTML = "";
-  let allOk = Q.length > 0;
   Q.forEach((it, idx) => {
+    it.catSel = it.catSel || ""; it.newCatName = it.newCatName || ""; syncCat(it);
     const c = check(it, idx);
-    allOk = allOk && c.ok;
     const d = document.createElement("div");
     d.className = "q " + (c.ok ? "ok" : "bad");
-    const row = DIDX.get(norm(it.word));
+    d.dataset.sig = sig(c, it);
     const vopts = [["девочка", "👧 Девочка"], ["мальчик", "👦 Мальчик"], ["без людей", "Без людей"]];
     d.innerHTML = `<img src="${it.url}" alt="">
       <div>
-        <input type="text" list="words" value="${esc(it.word)}" placeholder="Слово: чистить зубы" data-k="word">
+        <input type="text" list="words" value="${esc(it.word)}" placeholder="Слово: чистить зубы" data-k="word" autocomplete="off">
         <div class="segs">${vopts.map(([v, l]) => `<button class="sg ${it.variant === v ? "on" : ""}" data-v="${v}">${l}</button>`).join("")}
           <button class="sg ${it.style === "фото" ? "on" : ""}" data-s="1">📷 Фото</button></div>
         ${c.conflict ? `<div class="conf"><button class="sg ${it.mode !== "replace" ? "on" : ""}" data-m="add">Ещё вариант</button>
           <button class="sg ${it.mode === "replace" ? "on" : ""}" data-m="replace">Заменить существующую</button></div>` : ""}
         ${c.isNew && it.word.trim() ? `<div class="newword"><b>Новое слово.</b> Оно добавится в словарь.
-          <div class="row2"><div><label class="f">Категория</label>
-            <input type="text" list="cats" value="${esc(it.newCat)}" placeholder="например: игры" data-k="newCat"></div>
+          <div class="row2"><div>${catBlock(it)}</div>
           <div><label class="f">Какие картинки нужны</label><select data-k="newVariants">
             ${["девочка, мальчик", "без людей", "девочка, мальчик, без людей"].map(v =>
               `<option ${(it.newVariants || "девочка, мальчик") === v ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
           <label class="f">Теги для поиска (через запятую)</label>
-          <input type="text" value="${esc(it.newTags)}" placeholder="синонимы: прыгать, батут" data-k="newTags"></div>` : ""}
+          <input type="text" value="${esc(it.newTags)}" placeholder="синонимы: прыгать, батут" data-k="newTags" autocomplete="off"></div>` : ""}
         <div class="st ${c.cls}">${esc(c.msg)}</div>
       </div>
       <button class="rm" title="Убрать">✕</button>`;
-    d.querySelectorAll("input[data-k],select[data-k]").forEach(inp => {
-      inp.oninput = inp.onchange = () => {
+
+    // текстовые поля: пока печатаешь — карточка НЕ перерисовывается, обновляется только подсказка
+    d.querySelectorAll("input[data-k]").forEach(inp => {
+      inp.oninput = () => {
         it[inp.dataset.k] = inp.value;
         if (inp.dataset.k === "word"){
           it.n = 1; it.mode = "";
           const r2 = DIDX.get(norm(inp.value));
           if (r2 && onlyNoPeople(r2) && !it.variant) it.variant = "без людей";
         }
-        clearTimeout(it.t);
-        it.t = setTimeout(() => { const pos = inp.selectionStart, k = inp.dataset.k; renderQueue();
-          const again = $("queue").children[idx]?.querySelector(`[data-k="${k}"]`);
-          if (again){ again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} } }, inp.tagName === "SELECT" ? 0 : 350);
+        syncCat(it);
+        refresh();
       };
+      // когда закончила печатать (ушла из поля / Enter) — перестроить, если нужно
+      inp.onchange = () => {
+        if (inp.dataset.k === "newCatName") return renderQueue();      // чтобы новая категория появилась в списках
+        const c2 = check(it, idx);
+        if (sig(c2, it) !== d.dataset.sig) renderQueue();
+      };
+      inp.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); inp.blur(); } };
+    });
+    d.querySelectorAll("select[data-k]").forEach(sel => sel.onchange = () => {
+      it[sel.dataset.k] = sel.value; syncCat(it); renderQueue();
+      if (sel.dataset.k === "catSel" && sel.value === "__new")
+        setTimeout(() => $("queue").children[idx]?.querySelector('[data-k="newCatName"]')?.focus(), 0);
     });
     d.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { it.variant = it.variant === b.dataset.v ? "" : b.dataset.v; renderQueue(); });
     d.querySelector("[data-s]").onclick = () => { it.style = it.style === "фото" ? "рисунок" : "фото"; renderQueue(); };
@@ -338,10 +368,23 @@ function renderQueue(){
     d.querySelector(".rm").onclick = () => { URL.revokeObjectURL(it.url); Q.splice(idx, 1); renderQueue(); };
     box.appendChild(d);
   });
-  let dl = $("cats");
-  if (!dl){ dl = document.createElement("datalist"); dl.id = "cats"; document.body.appendChild(dl); }
-  dl.innerHTML = CATS.map(c => `<option value="${esc(c)}">`).join("");
   $("gowrap").hidden = !Q.length;
+  refresh();
+}
+/* что влияет на вид карточки (если меняется — перестраиваем) */
+function sig(c, it){ return [c.isNew && !!it.word.trim(), !!c.conflict].join("|"); }
+
+/* обновить подсказки и кнопку, не трогая поля ввода */
+function refresh(){
+  let allOk = Q.length > 0;
+  [...$("queue").children].forEach((d, idx) => {
+    const it = Q[idx]; if (!it) return;
+    const c = check(it, idx);
+    allOk = allOk && c.ok;
+    d.className = "q " + (c.ok ? "ok" : "bad");
+    const st = d.querySelector(".st");
+    st.className = "st " + c.cls; st.textContent = c.msg;
+  });
   $("go").disabled = !allOk;
   $("go").textContent = allOk ? `Загрузить ${Q.length} ${plural(Q.length, "картинку", "картинки", "картинок")} на сайт`
     : "Заполните отмеченные карточки";
@@ -493,11 +536,22 @@ function renderDict(){
     const v = rowVariants(r).join(", ");
     const tr = document.createElement("tr");
     if (r._new) tr.className = "nw"; else if (r._chg) tr.className = "chg";
-    tr.innerHTML = `<td><input type="text" list="cats" value="${esc(r["категория"])}" data-k="категория" ${has ? "disabled title='У слова есть картинки — категорию не меняем, иначе сменятся адреса'" : ""}></td>
+    const cats = allCats(); if (r["категория"] && !cats.includes(r["категория"])) cats.push(r["категория"]);
+    tr.innerHTML = `<td><select data-k="категория" ${has ? "disabled title='У слова есть картинки — категорию не меняем, иначе сменятся адреса'" : ""}>
+        <option value="" ${!r["категория"] ? "selected" : ""}>— категория —</option>
+        ${cats.map(c => `<option value="${esc(c)}" ${r["категория"] === c ? "selected" : ""}>${esc(cap(c))}</option>`).join("")}
+        <option value="__new">➕ Новая категория…</option></select></td>
       <td><input type="text" value="${esc(r["слово"])}" data-k="слово" ${has ? "disabled title='У слова есть картинки — переименовать нельзя'" : ""}></td>
       <td><select data-k="варианты">${VOPTS.map(o => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select></td>
       <td class="tg"><input type="text" value="${esc(r["теги"])}" data-k="теги" placeholder="синонимы через запятую"></td>`;
     tr.querySelectorAll("[data-k]").forEach(inp => inp.oninput = inp.onchange = () => {
+      if (inp.value === "__new"){
+        const name = (prompt("Название новой категории:") || "").trim().toLowerCase();
+        if (!name){ inp.value = r["категория"]; return; }
+        if (!CATS.includes(name)) CATS.push(name);
+                const o = document.createElement("option"); o.value = name; o.textContent = cap(name);
+        inp.insertBefore(o, inp.lastElementChild); inp.value = name;
+      }
       r[inp.dataset.k] = inp.value.trim(); r._chg = true; tr.className = r._new ? "nw" : "chg";
       dictDirty = true; $("dsavewrap").hidden = false;
     });
