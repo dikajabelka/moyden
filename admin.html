@@ -98,6 +98,27 @@
   @media (min-width:600px){.menu{align-items:center}.menu > div{border-radius:22px}}
   .menu img{width:140px;height:140px;object-fit:contain;display:block;margin:0 auto 8px}
   .menu h3{margin:0 0 10px;text-align:center}
+  .edbox{position:relative;max-height:92vh;overflow:auto;max-width:560px !important}
+  .edbox .dx{position:absolute;right:12px;top:12px;width:36px;height:36px;border-radius:50%;border:0;background:var(--bg);cursor:pointer}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:2px solid var(--line);border-radius:12px;padding:6px;background:#fff}
+  .chip{display:inline-flex;align-items:center;gap:2px;background:var(--lav);color:#4B4396;border-radius:10px;padding:4px 4px 4px 10px;font-weight:600;font-size:14px}
+  .chip.t{background:#EEF7F2;color:#146C43}
+  .chip button{border:0;background:transparent;color:inherit;font-size:17px;line-height:1;cursor:pointer;width:24px;height:24px;border-radius:50%}
+  .chip button:hover{background:rgba(0,0,0,.08)}
+  .chipsel{width:auto !important;border:0 !important;padding:5px 6px !important;font-size:14px;color:var(--purple);font-weight:600;background:transparent !important}
+  .chipin{flex:1 1 140px;width:auto !important;border:0 !important;padding:5px 6px !important;font-size:14px}
+  .edimgs{display:grid;gap:8px}
+  .edi{display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:center;border:2px solid var(--line);border-radius:14px;padding:8px}
+  .edi.foc{border-color:var(--purple)}
+  .edi.del{opacity:.55;background:#FFF5F5}
+  .edi img{width:72px;height:72px;object-fit:contain;margin:0;background:repeating-conic-gradient(#F3F4F8 0 25%,#fff 0 50%) 0 0/12px 12px;border-radius:10px}
+  .edi .sg{padding:4px 8px;font-size:13px}
+  .edact{display:flex;gap:12px;margin-top:6px;font-size:13px;flex-wrap:wrap}
+  .edact button,.edact a{border:0;background:none;color:var(--purple);cursor:pointer;padding:0;font:inherit;font-weight:600;text-decoration:none}
+  .edact .red{color:#C0392B}
+  .w .edit{border:0;background:var(--lav);color:var(--purple);border-radius:10px;padding:5px 10px;font-weight:700;cursor:pointer;font-size:13px}
+  .w .meta{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin-top:2px}
+  .w .cc{color:#4B4396;font-weight:600}
 </style>
 </head>
 <body>
@@ -169,17 +190,17 @@
     <!-- СЛОВАРЬ -->
     <section id="s-dict">
       <div class="panel">
-        <p class="muted" style="margin-top:0">Теги — синонимы для поиска через запятую. «Варианты» — какие картинки нужны слову (для плана).
-          Слово, у которого уже есть картинки, переименовать нельзя — сломаются адреса.</p>
+        <p class="muted" style="margin-top:0">Здесь удобно быстро вписать синонимы многим словам подряд.
+          Категории, название и картинки — кнопка ✎ (или вкладка «Картинки и план» → «Изменить»).</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input type="text" id="dq" placeholder="Найти…" style="flex:1 1 200px">
           <button class="btn ghost" id="dadd" style="width:auto;margin:0">+ Новое слово</button>
         </div>
       </div>
-      <table class="dict"><thead><tr><th>Категория</th><th>Слово</th><th>Варианты</th><th>Теги</th></tr></thead>
+      <table class="dict"><thead><tr><th>Категории</th><th>Слово</th><th>Нужны</th><th>Синонимы</th></tr></thead>
         <tbody id="dbody"></tbody></table>
       <div class="sticky-go" id="dsavewrap" hidden style="margin-top:12px">
-        <button class="btn" id="dsave">Сохранить словарь</button>
+        <button class="btn" id="dsave">Сохранить синонимы</button>
       </div>
     </section>
 

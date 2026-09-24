@@ -39,6 +39,9 @@ CATALOG = ROOT / "catalog.json"
 CATALOG_JS = ROOT / "catalog.js"
 PLAN = ROOT / "план.html"
 REPORT = ROOT / "отчёт.json"
+META = ROOT / "картинки.csv"      # правки из админки: слово / вариант / стиль для конкретного файла
+META_HEAD = ["файл", "слово", "вариант", "стиль"]
+REPLACE_DIR = "_заменить"
 
 DICT_HEAD = ["категория", "слово", "варианты", "теги", "комментарий"]
 VARIANTS = ["девочка", "мальчик", "без людей"]
@@ -113,6 +116,42 @@ def write_dict(rows):
             w.writerow([r.get(k, "") for k in DICT_HEAD])
 
 
+def row_cats(row):
+    """«режим, гигиена» -> ['режим', 'гигиена']; первая — основная"""
+    out = []
+    for c in re.split(r"[,;]", row.get("категория", "")):
+        c = nfc(c.strip().lower())
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def read_meta():
+    meta = {}
+    if not META.exists():
+        return meta
+    text = META.read_bytes().decode("utf-8-sig", errors="replace")
+    for r in csv.reader(io.StringIO(text), delimiter=";"):
+        if not r or norm(r[0]) == "файл":
+            continue
+        r = [nfc(c.strip()) for c in r] + [""] * 4
+        meta[r[0]] = dict(zip(META_HEAD, r[:4]))
+    return meta
+
+
+def write_meta(meta):
+    rows = [m for m in meta.values() if m.get("слово") or m.get("вариант") or m.get("стиль")]
+    if not rows:
+        if META.exists():
+            META.unlink()
+        return
+    with META.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(META_HEAD)
+        for m in sorted(rows, key=lambda m: m["файл"]):
+            w.writerow([m.get(k, "") for k in META_HEAD])
+
+
 def row_variants(row):
     vs = [norm(v) for v in row.get("варианты", "").split(",")]
     return [v for v in VARIANTS if norm(v) in vs] or ["девочка", "мальчик"]
@@ -152,9 +191,15 @@ def backup(path: Path, sub: str):
     shutil.copy2(path, dst)
 
 
-def write_image(src: Path, target_noext: Path):
-    """src -> target(.webp|.svg). Возвращает путь или None."""
+def write_image(src: Path, target_noext: Path, keep_ext=None):
+    """src -> target(.png|.webp|.svg). keep_ext — при замене сохранить прежний формат (= прежний адрес)."""
     ext = src.suffix.lower()
+    if keep_ext == ".svg" and ext != ".svg":
+        report["warn"].append(f"{target_noext.name}: была SVG, заменили на {ext} — адрес картинки изменился")
+        keep_ext = None
+    if ext == ".svg" and keep_ext not in (None, ".svg"):
+        report["warn"].append(f"{target_noext.name}: заменили на SVG — адрес картинки изменился")
+        keep_ext = None
     if ext == ".svg":
         text = prepare.clean_svg(src.read_text(encoding="utf-8", errors="replace"))
         report["warn"].extend(prepare.svg_warnings(src.name, text))
@@ -164,7 +209,7 @@ def write_image(src: Path, target_noext: Path):
         if prepare.Image is None:
             report["warn"].append(f"{src.name}: не могу обработать — не установлен Pillow")
             return None
-        data, new_ext, size, orig, limit = prepare.convert(src.read_bytes(), ext)
+        data, new_ext, size, orig, limit = prepare.convert(src.read_bytes(), ext, keep_ext)
         dst = target_noext.with_suffix(new_ext)
         if len(data) > limit:
             report["warn"].append(f"{dst.name}: {prepare.kb(len(data))} даже после сжатия — упростите картинку")
@@ -191,6 +236,18 @@ def process_inbox(rows, index):
             if f.name.lower() not in ("desktop.ini", "thumbs.db", "прочтите.txt"):
                 report["left"].append(f"{rel} — не картинка (нужны JPG, PNG, WEBP, SVG)")
             continue
+        if rel.parts[0] == REPLACE_DIR and len(rel.parts) > 1:      # новые/_заменить/<путь в images>.png
+            target = IMAGES / Path(*rel.parts[1:]).with_suffix("")
+            old = [q for q in target.parent.glob(target.name + ".*") if q.suffix.lower() in prepare.RASTER | {".svg"}]
+            if not old:
+                report["left"].append(f"{rel} — заменять нечего: картинки {target.relative_to(IMAGES)} нет")
+                continue
+            dst = write_image(f, target, old[0].suffix.lower())
+            if dst is None:
+                continue
+            backup(f, "новые"); f.unlink()
+            report["replaced"].append(str(dst.relative_to(IMAGES)))
+            continue
         word, variant, style, n = parse_name(f.stem)
         row = index.get(norm(word))
         if row is None:
@@ -208,15 +265,18 @@ def process_inbox(rows, index):
             variant = "без людей"
         if not variant:
             report["warn"].append(f"{rel}: не указано «девочка» / «мальчик» — картинка добавлена без варианта")
-        cat = row["категория"].strip().lower() or "разное"
+        cat = (row_cats(row) or ["разное"])[0]
         target = IMAGES / cat / slug(row, variant, style, n)
-        existed = any(target.parent.glob(target.name + ".*"))
+        # существующие картинки не затираем никогда — даём следующий номер (замена — только через _заменить)
+        while any(target.parent.glob(target.name + ".*")):
+            n += 1
+            target = IMAGES / cat / slug(row, variant, style, n)
         dst = write_image(f, target)
         if dst is None:
             continue
         backup(f, "новые")
         f.unlink()
-        (report["replaced"] if existed else report["added"]).append(str(dst.relative_to(IMAGES)))
+        report["added"].append(str(dst.relative_to(IMAGES)))
     # пустые подпапки убрать
     for d in sorted((p for p in INBOX.rglob("*") if p.is_dir()), reverse=True):
         try:
@@ -255,39 +315,48 @@ def normalize_images():
 
 
 # ---------------------------------------------------------------- 3. каталог
-def build_catalog(rows, index):
+def build_catalog(rows, index, meta):
     items, seen, cats = [], set(), set()
     exts = {".webp", ".png", ".svg"} | (set() if prepare.Image else {".jpg", ".jpeg"})
     files = sorted((p for p in IMAGES.rglob("*") if p.is_file() and p.suffix.lower() in exts),
                    key=lambda p: norm(str(p.relative_to(IMAGES))))
     for p in files:
         rel = p.relative_to(IMAGES)
-        category = nfc(rel.parts[0]) if len(rel.parts) > 1 else ""
+        folder = nfc(rel.parts[0]) if len(rel.parts) > 1 else ""
         word, variant, style, n = parse_name(p.stem)
+        m = meta.get("images/" + nfc(rel.as_posix()))
+        if m:                                             # правки из админки главнее имени файла
+            m["_used"] = True
+            if m.get("слово"):
+                word = m["слово"]
+            if m.get("вариант"):
+                variant = "" if m["вариант"] == "-" else m["вариант"]
+            if m.get("стиль"):
+                style = m["стиль"]
         row = index.get(norm(word))
         if row is None:
-            row = {"категория": category, "слово": word,
+            row = {"категория": folder, "слово": word,
                    "варианты": variant or "девочка, мальчик", "теги": "",
                    "комментарий": "добавлено автоматически"}
             rows.append(row); index[norm(word)] = row
-            report["new_words"].append(f"{word} → {category}")
-        elif norm(row["категория"]) != norm(category):
-            report["warn"].append(f"{rel}: лежит в «{category}», а в словаре категория "
-                                  f"«{row['категория']}». Файл не переношу — адрес бы сменился.")
-        if not variant and only_no_people(row):
+            report["new_words"].append(f"{word} → {folder}")
+        if not variant and only_no_people(row) and not (m and m.get("вариант") == "-"):
             variant = "без людей"
-        item_id = (f"{category}_{nfc(p.stem)}" if category else nfc(p.stem)).lower()
+        categories = row_cats(row) or ([folder] if folder else [])
+        category = categories[0] if categories else ""
+        rel_id = folder
+        item_id = (f"{rel_id}_{nfc(p.stem)}" if rel_id else nfc(p.stem)).lower()   # id = адрес, не меняется
         if item_id in seen:
             report["warn"].append(f"{rel}: повтор id «{item_id}» — есть файл с тем же именем, но другим расширением")
             continue
         seen.add(item_id)
-        if category:
-            cats.add(category)
+        cats.update(categories)
         w = row["слово"].strip()
         item = {
             "id": item_id,
             "title": w[:1].upper() + w[1:],
             "category": category,
+            "categories": categories,
             "file": "images/" + nfc(rel.as_posix()),
             "bytes": p.stat().st_size,
             "tags": row_tags(row),
@@ -313,7 +382,7 @@ def build_plan(rows, items):
         have.setdefault(norm(i["word"]), []).append(i)
     by_cat = {}
     for r in rows:
-        by_cat.setdefault(r["категория"].strip().lower() or "разное", []).append(r)
+        by_cat.setdefault((row_cats(r) or ["разное"])[0], []).append(r)
     need_total = done_total = 0
     parts = []
     for cat, rs in by_cat.items():
@@ -371,7 +440,14 @@ def main():
     print("2) Проверка images/")
     normalize_images()
     print("3) Каталог")
-    items, cats = build_catalog(rows, index)
+    meta = read_meta()
+    items, cats = build_catalog(rows, index, meta)
+    for k in [k for k, m in meta.items() if not m.get("_used")]:
+        report["warn"].append(f"картинки.csv: {k} — такого файла нет, строка убрана")
+        del meta[k]
+    for m in meta.values():
+        m.pop("_used", None)
+    write_meta(meta)
     write_dict(rows)
 
     old = {}

@@ -33,14 +33,17 @@ function init(d){
   (d.items || []).forEach(i => {
     i.variant = i.variant || ""; i.style = i.style || "рисунок"; i.n = i.n || 1;
     ITEM[i.id] = i;
-    const key = i.category + "|" + (i.word || i.title.toLowerCase());
-    if (!map.has(key)) map.set(key, {title: i.title, category: i.category, tags: i.tags || [], items: []});
-    map.get(key).items.push(i);
+    i.categories = i.categories && i.categories.length ? i.categories : (i.category ? [i.category] : []);
+    const key = i.word || i.title.toLowerCase();          // одно слово = одна карточка, даже если в нескольких категориях
+    if (!map.has(key)) map.set(key, {title: i.title, category: i.category, tags: i.tags || [], items: [], cats: []});
+    const g = map.get(key);
+    g.items.push(i);
+    i.categories.forEach(c => { if (!g.cats.includes(c)) g.cats.push(c); });
   });
   GROUPS = [...map.values()].map(g => {
     const order = {"девочка":0, "мальчик":1, "без людей":2, "":3};
     g.items.sort((a, b) => (a.style === "фото") - (b.style === "фото") || order[a.variant] - order[b.variant] || a.n - b.n);
-    g._t = norm(g.title); g._g = g.tags.map(norm); g._c = norm(g.category);
+    g._t = norm(g.title); g._g = g.tags.map(norm); g._c = norm(g.cats.join(" "));
     g.people = g.items.some(i => i.variant === "девочка" || i.variant === "мальчик");
     return g;
   }).sort((a, b) => a._t.localeCompare(b._t, "ru"));
@@ -83,7 +86,7 @@ function buildFilters(hasPhoto){
 
 function buildCats(cats){
   const box = $("cats"), counts = {};
-  GROUPS.forEach(g => counts[g.category] = (counts[g.category] || 0) + 1);
+  GROUPS.forEach(g => g.cats.forEach(c => counts[c] = (counts[c] || 0) + 1));
   const mk = (id, name, n) => {
     const b = document.createElement("button");
     b.className = "cat"; b.dataset.c = id; b.setAttribute("role", "tab");
@@ -122,7 +125,7 @@ function score(g, words){
     else if (g._g.some(t => t.startsWith(w))) s += 3;
     else if (g._t.includes(w)) s += 4;
     else if (g._g.some(t => t.includes(w))) s += 5;
-    else if (g._c.startsWith(w)) s += 6;
+    else if (g._c.split(" ").some(c => c.startsWith(w))) s += 6;
     else return -1;
   }
   return s;
@@ -139,7 +142,7 @@ function render(){
   const words = norm(q).trim().split(/\s+/).filter(Boolean);
   let pool = [];
   for (const g of GROUPS){
-    if (cat && g.category !== cat) continue;
+    if (cat && !g.cats.includes(cat)) continue;
     const v = visible(g);
     if (!v.length) continue;
     const s = words.length ? score(g, words) : 0;
@@ -184,7 +187,7 @@ function card({g, v}){
   d.tabIndex = 0;
   d.innerHTML = `<img src="${esc(cover.file)}" alt="${esc(g.title)}" loading="lazy" decoding="async">
     <div class="t">${esc(g.title)}</div>
-    <div class="c">${esc(g.category || "без категории")}</div>
+    <div class="c">${esc(g.cats.join(", ") || "без категории")}</div>
     ${g.items.length > 1 ? `<span class="nv" title="Вариантов картинки">${g.items.length}</span>` : ""}
     <button class="pick" title="В лист для печати" aria-label="В лист для печати">${on ? TICK : PLUS}</button>`;
   d.onclick = e => {
@@ -241,7 +244,7 @@ function showItem(i){
   cur = i;
   $("dimg").src = i.file; $("dimg").alt = i.title;
   const ext = (i.file.split(".").pop() || "").toUpperCase();
-  $("dsub").textContent = [i.category, curG.items.length > 1 ? variantLabel(i) : (i.variant || ""),
+  $("dsub").textContent = [curG.cats.join(", "), curG.items.length > 1 ? variantLabel(i) : (i.variant || ""),
     ext, i.w ? `${i.w}×${i.h}` : "", Math.max(1, Math.round(i.bytes / 1024)) + " КБ"]
     .filter(Boolean).join(" · ");
   $("dvars").querySelectorAll("button").forEach(b => {
@@ -298,6 +301,6 @@ function writeHash(){
 function readHash(){
   const p = new URLSearchParams(location.hash.slice(1));
   q = p.get("q") || ""; cat = p.get("c") || "";
-  if (cat && !GROUPS.some(g => g.category === cat)) cat = "";
+  if (cat && !GROUPS.some(g => g.cats.includes(cat))) cat = "";
   $("q").value = q;
 }

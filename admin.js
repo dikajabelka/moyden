@@ -12,7 +12,7 @@ const DICT_HEAD = ["категория", "слово", "варианты", "те
 const MAXSIDE = 1024;   // до такого размера уменьшаем в браузере перед загрузкой (окончательно — 512 на GitHub)
 
 let S = {token: "", owner: "", repo: "", branch: "main"};
-let DICT = [], DIDX = new Map(), CAT = {items: [], categories: []}, CATS = [];
+let DICT = [], DIDX = new Map(), CAT = {items: [], categories: []}, CATS = [], META = new Map();
 
 /* ================= GitHub API ================= */
 async function gh(path, opt = {}){
@@ -145,7 +145,12 @@ function toCSV(rows){
 }
 
 async function loadData(){
-  const [dict, cat] = await Promise.all([readText("словарь.csv"), readText("catalog.json")]);
+  const [dict, cat, meta] = await Promise.all([readText("словарь.csv"), readText("catalog.json"), readText("картинки.csv")]);
+  META = new Map();
+  for (const r of parseCSV(meta || "")){
+    if (norm(r[0]) === "файл" || !r[0]) continue;
+    META.set(r[0].trim().normalize("NFC"), {"файл": r[0].trim().normalize("NFC"), "слово": (r[1] || "").trim(), "вариант": (r[2] || "").trim(), "стиль": (r[3] || "").trim()});
+  }
   DICT = [];
   for (const r of parseCSV(dict || "")){
     if (norm(r[0]) === "категория") continue;
@@ -159,7 +164,7 @@ async function loadData(){
 }
 function reindex(){
   DIDX = new Map(DICT.map(r => [norm(r["слово"]), r]));
-  CATS = [...new Set([...DICT.map(r => r["категория"].toLowerCase()), ...(CAT.categories || [])].filter(Boolean))].sort();
+  CATS = [...new Set([...DICT.flatMap(rowCats), ...(CAT.categories || [])].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
   let dl = $("words");
   if (!dl){ dl = document.createElement("datalist"); dl.id = "words"; document.body.appendChild(dl); }
   dl.innerHTML = DICT.map(r => `<option value="${esc(r["слово"])}">`).join("");
@@ -169,6 +174,8 @@ const rowVariants = r => {
   const out = VARIANTS.filter(x => v.includes(norm(x)));
   return out.length ? out : ["девочка", "мальчик"];
 };
+const rowCats = r => [...new Set((r["категория"] || "").split(/[,;]/).map(c => c.trim().toLowerCase()).filter(Boolean))];
+const rowTags = r => [...new Set((r["теги"] || "").split(/[,;]/).map(c => c.trim().toLowerCase()).filter(Boolean))];
 const onlyNoPeople = r => { const v = rowVariants(r); return v.length === 1 && v[0] === "без людей"; };
 const itemsOf = word => CAT.items.filter(i => norm(i.word || i.title) === norm(word));
 
@@ -249,8 +256,9 @@ function addFiles(files, preset){
     if (!row && !preset) p.n = 1;             // IMG_2031 — это не номер варианта
     const it = {id: ++qid, file: f, ext, url: URL.createObjectURL(f),
       word: row ? row["слово"] : (preset ? p.word : (/^(img|image|photo|dsc|screenshot|снимок)/i.test(p.word) ? "" : p.word)),
-      variant: p.variant, style: p.style,
-      n: p.n, mode: preset && preset.mode || "", newCat: "", catSel: "", newCatName: "", newTags: "", newVariants: ""};
+      variant: p.variant, style: p.style, n: p.n || 1, replaceFile: preset && preset.replaceFile || "",
+      replaceLabel: preset && preset.replaceLabel || "",
+      newCat: "", catSel: "", newCatName: "", newTags: "", newVariants: ""};
     if (row && !it.variant && onlyNoPeople(row)) it.variant = "без людей";
     Q.push(it);
   }
@@ -260,7 +268,12 @@ function addFiles(files, preset){
 
 /* проверка одной строки очереди */
 function check(it, idx){
-  const r = {ok: false, msg: "", cls: "err", conflict: null, isNew: false};
+  const r = {ok: false, msg: "", cls: "err", isNew: false};
+  if (it.replaceFile){
+    r.ok = true; r.cls = "good";
+    r.msg = `✓ Заменит картинку «${cap(it.word)}${it.replaceLabel ? " · " + it.replaceLabel : ""}». Адрес останется прежним.`;
+    return r;
+  }
   if (!it.word.trim()){ r.msg = "Впишите слово — какая это картинка."; return r; }
   const row = DIDX.get(norm(it.word));
   r.isNew = !row;
@@ -268,23 +281,17 @@ function check(it, idx){
   const needPeople = row ? !onlyNoPeople(row) : (it.newVariants || "девочка, мальчик") !== "без людей";
   if (!it.variant && !needPeople) it.variant = "без людей";
   if (!it.variant && needPeople){ r.msg = "Выберите, кто на картинке."; r.cls = "warn"; return r; }
-  // занят ли такой вариант (в каталоге или в этой же очереди выше)
+  // номер варианта: первый свободный (в каталоге и выше в очереди)
   const same = x => norm(x.word) === norm(it.word) && (x.variant || "") === (it.variant || "") && x.style === it.style;
   const taken = new Set(itemsOf(it.word).filter(same).map(x => x.n));
-  Q.slice(0, idx).filter(same).forEach(x => taken.add(x.finalN));
-  let n = it.n;
-  if (taken.has(n)){
-    r.conflict = true;
-    if (it.mode === "replace") n = it.n;
-    else { n = 1; while (taken.has(n)) n++; }
-  }
+  Q.slice(0, idx).filter(x => !x.replaceFile).filter(same).forEach(x => taken.add(x.finalN));
+  let n = 1; while (taken.has(n)) n++;
   it.finalN = n;
-  const cat = row ? row["категория"] : it.newCat;
+  const cat = row ? rowCats(row).join(", ") : it.newCat;
   const label = [it.variant, it.style === "фото" ? "фото" : "", n > 1 ? "№" + n : ""].filter(Boolean).join(", ");
   r.ok = true; r.cls = "good";
   r.msg = `✓ «${cap(it.word.trim())}» → ${cat}${label ? ", " + label : ""}` +
-    (r.conflict ? (it.mode === "replace" ? " — заменит существующую" : " — будет ещё одним вариантом") : "") +
-    (r.isNew ? " · новое слово" : "");
+    (n > 1 ? " — ещё один вариант" : "") + (r.isNew ? " · новое слово" : "");
   return r;
 }
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -306,7 +313,8 @@ function catBlock(it){
     </select>
     ${it.catSel === "__new" ? `<input type="text" data-k="newCatName" value="${esc(it.newCatName)}"
         placeholder="Название, например: праздники" style="margin-top:6px" autocomplete="off">
-      <div class="muted" style="font-size:12px;margin-top:3px">Новая категория появится на сайте после загрузки.</div>` : ""}`;
+      <div class="muted" style="font-size:12px;margin-top:3px">Новая категория появится на сайте после загрузки.</div>` : ""}
+    <div class="muted" style="font-size:12px;margin-top:3px">Ещё категории можно добавить потом — в карточке слова.</div>`;
 }
 
 function renderQueue(){
@@ -321,18 +329,17 @@ function renderQueue(){
     const vopts = [["девочка", "👧 Девочка"], ["мальчик", "👦 Мальчик"], ["без людей", "Без людей"]];
     d.innerHTML = `<img src="${it.url}" alt="">
       <div>
+        ${it.replaceFile ? `<b>${esc(cap(it.word))}</b> <span class="muted">· замена</span>` : `
         <input type="text" list="words" value="${esc(it.word)}" placeholder="Слово: чистить зубы" data-k="word" autocomplete="off">
         <div class="segs">${vopts.map(([v, l]) => `<button class="sg ${it.variant === v ? "on" : ""}" data-v="${v}">${l}</button>`).join("")}
-          <button class="sg ${it.style === "фото" ? "on" : ""}" data-s="1">📷 Фото</button></div>
-        ${c.conflict ? `<div class="conf"><button class="sg ${it.mode !== "replace" ? "on" : ""}" data-m="add">Ещё вариант</button>
-          <button class="sg ${it.mode === "replace" ? "on" : ""}" data-m="replace">Заменить существующую</button></div>` : ""}
-        ${c.isNew && it.word.trim() ? `<div class="newword"><b>Новое слово.</b> Оно добавится в словарь.
+          <button class="sg ${it.style === "фото" ? "on" : ""}" data-s="1">📷 Фото</button></div>`}
+        ${c.isNew && it.word.trim() && !it.replaceFile ? `<div class="newword"><b>Новое слово.</b> Оно добавится в словарь.
           <div class="row2"><div>${catBlock(it)}</div>
           <div><label class="f">Какие картинки нужны</label><select data-k="newVariants">
             ${["девочка, мальчик", "без людей", "девочка, мальчик, без людей"].map(v =>
               `<option ${(it.newVariants || "девочка, мальчик") === v ? "selected" : ""}>${v}</option>`).join("")}</select></div></div>
-          <label class="f">Теги для поиска (через запятую)</label>
-          <input type="text" value="${esc(it.newTags)}" placeholder="синонимы: прыгать, батут" data-k="newTags" autocomplete="off"></div>` : ""}
+          <label class="f">Синонимы для поиска (через запятую)</label>
+          <input type="text" value="${esc(it.newTags)}" placeholder="например: прыгать, батут" data-k="newTags" autocomplete="off"></div>` : ""}
         <div class="st ${c.cls}">${esc(c.msg)}</div>
       </div>
       <button class="rm" title="Убрать">✕</button>`;
@@ -342,18 +349,15 @@ function renderQueue(){
       inp.oninput = () => {
         it[inp.dataset.k] = inp.value;
         if (inp.dataset.k === "word"){
-          it.n = 1; it.mode = "";
           const r2 = DIDX.get(norm(inp.value));
           if (r2 && onlyNoPeople(r2) && !it.variant) it.variant = "без людей";
         }
         syncCat(it);
         refresh();
       };
-      // когда закончила печатать (ушла из поля / Enter) — перестроить, если нужно
       inp.onchange = () => {
         if (inp.dataset.k === "newCatName") return renderQueue();      // чтобы новая категория появилась в списках
-        const c2 = check(it, idx);
-        if (sig(c2, it) !== d.dataset.sig) renderQueue();
+        if (sig(check(it, idx), it) !== d.dataset.sig) renderQueue();
       };
       inp.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); inp.blur(); } };
     });
@@ -363,16 +367,14 @@ function renderQueue(){
         setTimeout(() => $("queue").children[idx]?.querySelector('[data-k="newCatName"]')?.focus(), 0);
     });
     d.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { it.variant = it.variant === b.dataset.v ? "" : b.dataset.v; renderQueue(); });
-    d.querySelector("[data-s]").onclick = () => { it.style = it.style === "фото" ? "рисунок" : "фото"; renderQueue(); };
-    d.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { it.mode = b.dataset.m; renderQueue(); });
+    d.querySelector("[data-s]")?.addEventListener("click", () => { it.style = it.style === "фото" ? "рисунок" : "фото"; renderQueue(); });
     d.querySelector(".rm").onclick = () => { URL.revokeObjectURL(it.url); Q.splice(idx, 1); renderQueue(); };
     box.appendChild(d);
   });
   $("gowrap").hidden = !Q.length;
   refresh();
 }
-/* что влияет на вид карточки (если меняется — перестраиваем) */
-function sig(c, it){ return [c.isNew && !!it.word.trim(), !!c.conflict].join("|"); }
+function sig(c, it){ return String(c.isNew && !!it.word.trim()); }
 
 /* обновить подсказки и кнопку, не трогая поля ввода */
 function refresh(){
@@ -420,15 +422,20 @@ $("go").onclick = async () => {
     for (let i = 0; i < Q.length; i++){
       const it = Q[i];
       check(it, i);
-      const w = it.word.trim().toLowerCase().normalize("NFC");
-      if (!DIDX.get(norm(w))){
-        DICT.push({"категория": it.newCat.trim().toLowerCase(), "слово": w,
-          "варианты": it.newVariants || "девочка, мальчик", "теги": it.newTags.trim(), "комментарий": "добавлено из админки"});
-        reindex(); dictChanged = true;
-      }
       const {bytes, ext} = await shrink(it);
-      const name = [w, it.variant, it.style === "фото" ? "фото" : "", it.finalN > 1 ? it.finalN : ""].filter(Boolean).join(" ");
-      files.push({path: `новые/${name}.${ext}`, b64: b64FromBytes(bytes)});
+      if (it.replaceFile){
+        const rel = it.replaceFile.replace(/^images\//, "").replace(/\.[^.\/]+$/, "");
+        files.push({path: `новые/_заменить/${rel}.${ext}`, b64: b64FromBytes(bytes)});
+      } else {
+        const w = it.word.trim().toLowerCase().normalize("NFC");
+        if (!DIDX.get(norm(w))){
+          DICT.push({"категория": it.newCat.trim().toLowerCase(), "слово": w,
+            "варианты": it.newVariants || "девочка, мальчик", "теги": it.newTags.trim(), "комментарий": "добавлено из админки"});
+          reindex(); dictChanged = true;
+        }
+        const name = [w, it.variant, it.style === "фото" ? "фото" : "", it.finalN > 1 ? it.finalN : ""].filter(Boolean).join(" ");
+        files.push({path: `новые/${name}.${ext}`, b64: b64FromBytes(bytes)});
+      }
       btn.textContent = `Готовлю ${i + 1} из ${Q.length}…`;
     }
     if (dictChanged) files.push({path: "словарь.csv", b64: b64FromText(toCSV(DICT))});
@@ -454,32 +461,39 @@ function renderLib(){
     const vs = rowVariants(r);
     const miss = vs.filter(v => !its.some(i => i.variant === v));
     need += vs.length; done += vs.length - miss.length;
-    if (q && !norm(r["слово"]).includes(q) && !norm(r["теги"]).includes(q)) continue;
+    if (q && !norm(r["слово"] + " " + r["теги"] + " " + r["категория"]).includes(q)) continue;
     if (libFilter === "miss" && !miss.length) continue;
     if (libFilter === "empty" && its.length) continue;
     if (libFilter === "done" && miss.length) continue;
-    const c = r["категория"] || "разное";
+    const c = rowCats(r)[0] || "без категории";
     if (!byCat.has(c)) byCat.set(c, []);
     byCat.get(c).push({r, its, miss});
   }
   $("libsum").innerHTML = `<b>Нарисовано ${done} из ${need}</b> нужных вариантов · картинок на сайте: ${CAT.items.length}`;
   $("libprog").style.width = (need ? Math.round(100 * done / need) : 0) + "%";
   $("libf").innerHTML = [["", "Все слова"], ["miss", "Чего-то не хватает"], ["empty", "Совсем нет картинок"], ["done", "Готовые"]]
-    .map(([v, l]) => `<button class="sg ${libFilter === v ? "on" : ""}" data-f="${v}">${l}</button>`).join("");
+    .map(([v, l]) => `<button class="sg ${libFilter === v ? "on" : ""}" data-f="${v}">${l}</button>`).join("")
+    + `<button class="sg" id="libnew" style="margin-left:auto">+ Новое слово</button>`;
   $("libf").querySelectorAll("[data-f]").forEach(b => b.onclick = () => { libFilter = b.dataset.f; renderLib(); });
+  $("libnew").onclick = () => openEditor(null);
 
   const box = $("lib"); box.innerHTML = "";
-  for (const [c, list] of byCat){
+  for (const [c, list] of [...byCat].sort((a, b) => a[0].localeCompare(b[0], "ru"))){
     const h = document.createElement("h3"); h.className = "lib-cat"; h.textContent = cap(c); box.appendChild(h);
     for (const {r, its, miss} of list){
       const d = document.createElement("div"); d.className = "w";
-      d.innerHTML = `<div class="h"><b>${esc(cap(r["слово"]))}</b><span class="muted">${esc(r["теги"])}</span></div>
+      const cats = rowCats(r);
+      d.innerHTML = `<div class="h"><b>${esc(cap(r["слово"]))}</b>
+          <button class="edit" title="Изменить карточку">✎ Изменить</button></div>
+        <div class="meta">${cats.length > 1 ? `<span class="cc">${cats.map(x => esc(cap(x))).join(" · ")}</span>` : ""}
+          ${r["теги"] ? `<span class="muted">${esc(r["теги"])}</span>` : `<span class="muted" style="color:#C9A227">нет синонимов</span>`}</div>
         <div class="thumbs">
           ${its.map(i => `<div class="th" data-id="${esc(i.id)}"><img src="${esc(i.file)}" loading="lazy" alt="">${esc(vlabel(i))}</div>`).join("")}
           ${miss.map(v => `<div class="miss" data-v="${esc(v)}"><i>+</i>${esc(v)}</div>`).join("")}
           <div class="miss more-add" data-v=""><i>+</i>ещё</div>
         </div>`;
-      d.querySelectorAll(".th").forEach(t => t.onclick = () => itemMenu(CAT.items.find(i => i.id === t.dataset.id), r));
+      d.querySelector(".edit").onclick = () => openEditor(r);
+      d.querySelectorAll(".th").forEach(t => t.onclick = () => openEditor(r, t.dataset.id));
       d.querySelectorAll(".miss").forEach(m => m.onclick = () => pickFor(r, m.dataset.v));
       box.appendChild(d);
     }
@@ -487,97 +501,231 @@ function renderLib(){
   if (!byCat.size) box.innerHTML = '<p class="muted">Ничего не найдено.</p>';
 }
 $("libq").oninput = () => { clearTimeout(renderLib.t); renderLib.t = setTimeout(renderLib, 200); };
-const vlabel = i => [i.variant, i.style === "фото" ? "фото" : "", i.n > 1 ? i.n : ""].filter(Boolean).join(" ") || "основная";
+const vlabel = i => [i.variant, i.style === "фото" ? "фото" : "", i.n > 1 ? i.n : ""].filter(Boolean).join(" ") || "без варианта";
 
-/* выбрать файл сразу под нужное слово и вариант */
-function pickFor(r, variant, mode, item){
+/* выбрать файл: новая картинка для слова или замена конкретной */
+function pickFor(r, variant, item){
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg";
   inp.multiple = !item;
   inp.onchange = () => {
-    const files = [...inp.files];
-    files.forEach((f, k) => addFiles([f], {word: r["слово"], variant: variant || (onlyNoPeople(r) ? "без людей" : ""),
-      style: item ? item.style : "рисунок", n: item ? item.n : 1, mode: mode || ""}));
+    [...inp.files].forEach(f => addFiles([f], item
+      ? {word: r["слово"], variant: item.variant, style: item.style, n: item.n, replaceFile: item.file, replaceLabel: vlabel(item)}
+      : {word: r["слово"], variant: variant || (onlyNoPeople(r) ? "без людей" : ""), style: "рисунок", n: 1}));
   };
   inp.click();
 }
 
-function itemMenu(i, r){
+/* ================= КАРТОЧКА СЛОВА (редактор) ================= */
+function openEditor(row, focusId){
+  const isNew = !row;
+  const origWord = row ? row["слово"] : "";
+  const e = {word: origWord, cats: row ? rowCats(row) : [], tags: row ? rowTags(row) : [],
+    variants: row ? rowVariants(row) : ["девочка", "мальчик"]};
+  const its = row ? itemsOf(origWord) : [];
+  const ed = new Map(its.map(i => [i.file, {variant: i.variant, style: i.style, del: false}]));
   const m = document.createElement("div"); m.className = "menu";
-  m.innerHTML = `<div><img src="${esc(i.file)}" alt=""><h3>${esc(i.title)} · ${esc(vlabel(i))}</h3>
-    <p class="muted" style="text-align:center;margin-top:-6px">${esc(i.file)} · ${Math.max(1, Math.round(i.bytes / 1024))} КБ</p>
-    <button class="btn" data-a="rep">Заменить картинку (адрес останется)</button>
-    <a class="btn ghost" href="${esc(i.file)}" target="_blank">Открыть</a>
-    <button class="btn ghost" data-a="del" style="color:#C0392B">Удалить</button>
-    <button class="btn ghost" data-a="x">Отмена</button></div>`;
-  m.onclick = async e => {
-    const a = e.target.dataset.a;
-    if (e.target === m || a === "x") m.remove();
-    if (a === "rep"){ m.remove(); pickFor(r, i.variant, "replace", i); }
-    if (a === "del"){
-      if (!confirm(`Удалить «${i.title} · ${vlabel(i)}»?\n\nЕсли картинку уже скачали в приложение — у них она останется, но новые пользователи её не найдут.`)) return;
-      m.remove();
-      try { const sha = await commit([{path: i.file, del: true}], `Админка: удалена ${i.file}`); watchRuns(sha); }
-      catch (err) { alert("Не получилось: " + err.message); }
-    }
+  let dirty = false;
+  const close = () => { if (!dirty || confirm("Закрыть без сохранения?")) m.remove(); };
+
+  let drawing = false;
+  const draw = (focus) => {
+    if (drawing) return;
+    drawing = true;
+    const ae = document.activeElement; if (ae && m.contains(ae)) ae.onblur = null;
+    try { drawInner(focus); } finally { drawing = false; }
   };
+  const drawInner = (focus) => {
+    const other = allCats().filter(c => !e.cats.includes(c));
+    m.innerHTML = `<div class="edbox">
+      <button class="dx" data-a="x" aria-label="Закрыть">✕</button>
+      <h3 style="text-align:left">${isNew ? "Новое слово" : "Карточка «" + esc(cap(origWord)) + "»"}</h3>
+      <label class="f">Слово — подпись на карточке</label>
+      <input type="text" id="e-word" value="${esc(e.word)}" placeholder="например: чистить зубы" autocomplete="off">
+      ${!isNew ? `<div class="muted" style="font-size:12px;margin-top:3px">Можно переименовать. Если впишете слово, которое уже есть, — карточки объединятся.</div>` : ""}
+
+      <label class="f">Категории (первая — основная)</label>
+      <div class="chips">
+        ${e.cats.map((c, k) => `<span class="chip">${esc(cap(c))}<button data-rc="${k}" aria-label="убрать">×</button></span>`).join("")}
+        <select id="e-addcat" class="chipsel"><option value="">+ категория</option>
+          ${other.map(c => `<option value="${esc(c)}">${esc(cap(c))}</option>`).join("")}
+          <option value="__new">➕ Новая категория…</option></select>
+      </div>
+
+      <label class="f">Синонимы для поиска</label>
+      <div class="chips">
+        ${e.tags.map((t, k) => `<span class="chip t">${esc(t)}<button data-rt="${k}" aria-label="убрать">×</button></span>`).join("")}
+        <input type="text" id="e-tag" class="chipin" placeholder="+ синоним, Enter" autocomplete="off">
+      </div>
+
+      <label class="f">Какие картинки нужны этому слову</label>
+      <div class="segs">${VARIANTS.map(v => `<button class="sg ${e.variants.includes(v) ? "on" : ""}" data-nv="${v}">${e.variants.includes(v) ? "✓ " : ""}${v}</button>`).join("")}</div>
+
+      ${!isNew ? `<label class="f">Картинки (${its.length})</label>
+      <div class="edimgs">
+        ${its.map(i => { const x = ed.get(i.file); return `<div class="edi ${x.del ? "del" : ""} ${i.id === focusId ? "foc" : ""}" data-f="${esc(i.file)}">
+          <img src="${esc(i.file)}" alt="">
+          <div style="min-width:0">
+            <div class="segs" style="margin-top:0">
+              ${[["девочка", "👧 Девочка"], ["мальчик", "👦 Мальчик"], ["без людей", "Без людей"]].map(([v, l]) =>
+                `<button class="sg ${x.variant === v ? "on" : ""}" data-iv="${v}">${l}</button>`).join("")}
+              <button class="sg ${x.style === "фото" ? "on" : ""}" data-is="1">📷 Фото</button>
+            </div>
+            <div class="edact">
+              <button data-rep="1">Заменить файл</button>
+              <a href="${esc(i.file)}" target="_blank">Открыть</a>
+              <button data-del="1" class="${x.del ? "" : "red"}">${x.del ? "Вернуть" : "Удалить"}</button>
+            </div>
+            ${x.del ? `<div class="st err" style="margin-top:4px">Будет удалена при сохранении</div>` : ""}
+          </div></div>`; }).join("")}
+        <button class="sg" id="e-addimg">+ Добавить картинку</button>
+      </div>` : ""}
+
+      <p class="st err" id="e-err"></p>
+      <button class="btn" id="e-save">Сохранить</button>
+      ${row && !its.length ? `<button class="btn ghost" id="e-delword" style="color:#C0392B">Удалить слово из словаря</button>` : ""}
+      <button class="btn ghost" data-a="x">Отмена</button>
+    </div>`;
+
+    const q = s => m.querySelector(s);
+    q("#e-word").oninput = ev => { e.word = ev.target.value; dirty = true; };
+    m.querySelectorAll("[data-rc]").forEach(b => b.onclick = () => { e.cats.splice(+b.dataset.rc, 1); dirty = true; draw(); });
+    q("#e-addcat").onchange = ev => {
+      let v = ev.target.value;
+      if (v === "__new") v = (prompt("Название новой категории:") || "").trim().toLowerCase();
+      if (v && !e.cats.includes(v)){ e.cats.push(v); if (!CATS.includes(v)) CATS.push(v); dirty = true; }
+      draw();
+    };
+    const addTag = () => {
+      const inp = q("#e-tag");
+      const parts = inp.value.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+      parts.forEach(t => { if (!e.tags.includes(t)) e.tags.push(t); });
+      if (parts.length){ dirty = true; draw("#e-tag"); }
+    };
+    q("#e-tag").onkeydown = ev => { if (ev.key === "Enter" || ev.key === ","){ ev.preventDefault(); addTag(); } };
+    q("#e-tag").onblur = () => { if (q("#e-tag").value.trim()) addTag(); };
+    m.querySelectorAll("[data-rt]").forEach(b => b.onmousedown = ev => ev.preventDefault());
+    m.querySelectorAll("[data-rt]").forEach(b => b.onclick = () => { e.tags.splice(+b.dataset.rt, 1); dirty = true; draw(); });
+    m.querySelectorAll("[data-nv]").forEach(b => b.onclick = () => {
+      const v = b.dataset.nv, k = e.variants.indexOf(v);
+      if (k >= 0) e.variants.splice(k, 1); else e.variants.push(v);
+      e.variants = VARIANTS.filter(x => e.variants.includes(x)); dirty = true; draw();
+    });
+    m.querySelectorAll(".edi").forEach(el => {
+      const x = ed.get(el.dataset.f), item = its.find(i => i.file === el.dataset.f);
+      el.querySelectorAll("[data-iv]").forEach(b => b.onclick = () => { x.variant = x.variant === b.dataset.iv ? "" : b.dataset.iv; dirty = true; draw(); });
+      el.querySelector("[data-is]").onclick = () => { x.style = x.style === "фото" ? "рисунок" : "фото"; dirty = true; draw(); };
+      el.querySelector("[data-del]").onclick = () => { x.del = !x.del; dirty = true; draw(); };
+      el.querySelector("[data-rep]").onclick = () => { m.remove(); pickFor(row, "", item); };
+    });
+    q("#e-addimg")?.addEventListener("click", () => { m.remove(); pickFor(row, ""); });
+    m.querySelectorAll("[data-a=x]").forEach(b => b.onclick = close);
+    q("#e-save").onclick = () => saveEditor();
+    q("#e-delword")?.addEventListener("click", async () => {
+      if (!confirm(`Удалить слово «${origWord}» из словаря?`)) return;
+      DICT.splice(DICT.indexOf(row), 1); reindex();
+      m.remove(); await saveFiles([], `Админка: удалено слово «${origWord}»`);
+    });
+    if (focus) q(focus)?.focus();
+  };
+
+  async function saveEditor(){
+    const err = t => { m.querySelector("#e-err").textContent = t; };
+    const t = m.querySelector("#e-tag"); if (t && t.value.trim()){ t.value.split(",").map(x => x.trim().toLowerCase()).filter(Boolean).forEach(x => { if (!e.tags.includes(x)) e.tags.push(x); }); }
+    const w = e.word.trim().toLowerCase().normalize("NFC");
+    if (!w) return err("Впишите слово.");
+    if (!e.cats.length) return err("Добавьте хотя бы одну категорию.");
+    if (!e.variants.length) return err("Отметьте, какие картинки нужны (хотя бы одно).");
+    const other = DIDX.get(norm(w));
+    let target = row;
+    if (other && other !== row){
+      if (isNew) return err(`Слово «${w}» уже есть в словаре — откройте его карточку.`);
+      if (!confirm(`Слово «${w}» уже есть.\n\nОбъединить? Картинки «${origWord}» перейдут к нему, категории и синонимы сложатся.`)) return;
+      target = other;
+      rowCats(other).forEach(c => { if (!e.cats.includes(c)) e.cats.push(c); });
+      rowTags(other).forEach(x => { if (!e.tags.includes(x)) e.tags.push(x); });
+      rowVariants(other).forEach(x => { if (!e.variants.includes(x)) e.variants.push(x); });
+      DICT.splice(DICT.indexOf(row), 1);
+    } else if (isNew){
+      target = {"комментарий": "добавлено из админки"}; DICT.push(target);
+    }
+    target["слово"] = w;
+    target["категория"] = e.cats.join(", ");
+    target["теги"] = e.tags.join(", ");
+    target["варианты"] = VARIANTS.filter(x => e.variants.includes(x)).join(", ");
+    reindex();
+
+    const renamed = !isNew && norm(origWord) !== norm(w);
+    const files = [];
+    let metaChanged = false;
+    for (const i of its){
+      const x = ed.get(i.file);
+      if (x.del){ files.push({path: i.file, del: true}); if (META.delete(i.file)) metaChanged = true; continue; }
+      const mm = META.get(i.file) || {"файл": i.file, "слово": "", "вариант": "", "стиль": ""};
+      let ch = false;
+      if (renamed){ mm["слово"] = w; ch = true; }
+      if (x.variant !== i.variant){ mm["вариант"] = x.variant || "-"; ch = true; }
+      if (x.style !== i.style){ mm["стиль"] = x.style; ch = true; }
+      if (ch){ META.set(i.file, mm); metaChanged = true; }
+    }
+    if (metaChanged) files.push({path: "картинки.csv", b64: b64FromText(toMetaCSV())});
+    m.remove();
+    await saveFiles(files, `Админка: карточка «${w}»`);
+  }
+  draw();
   document.body.appendChild(m);
+  m.addEventListener("mousedown", ev => { if (ev.target === m) close(); });
 }
 
-/* ================= СЛОВАРЬ ================= */
+async function saveFiles(files, message){
+  try {
+    files.push({path: "словарь.csv", b64: b64FromText(toCSV(DICT))});
+    status("run", "Сохраняю…");
+    const sha = await commit(files, message);
+    renderLib(); renderDict();
+    watchRuns(sha);
+  } catch (e) { alert("Не получилось сохранить: " + e.message); await loadData(); }
+}
+
+function toMetaCSV(){
+  const H = ["файл", "слово", "вариант", "стиль"];
+  const f = v => /[;"\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  const rows = [...META.values()].filter(r => r["слово"] || r["вариант"] || r["стиль"])
+    .sort((a, b) => a["файл"].localeCompare(b["файл"]));
+  return "\uFEFF" + [H, ...rows.map(r => H.map(k => r[k] || ""))].map(r => r.map(x => f(String(x))).join(";")).join("\r\n") + "\r\n";
+}
+
+/* ================= СЛОВАРЬ (быстрая правка синонимов) ================= */
 let dictDirty = false;
 function renderDict(){
   const q = norm($("dq").value);
   const body = $("dbody"); body.innerHTML = "";
-  const VOPTS = ["девочка, мальчик", "без людей", "девочка, мальчик, без людей"];
-  DICT.forEach((r, k) => {
+  DICT.forEach(r => {
     if (q && !norm(r["слово"] + " " + r["теги"] + " " + r["категория"]).includes(q)) return;
-    const has = itemsOf(r["слово"]).length > 0;
-    const v = rowVariants(r).join(", ");
+    const n = itemsOf(r["слово"]).length;
     const tr = document.createElement("tr");
-    if (r._new) tr.className = "nw"; else if (r._chg) tr.className = "chg";
-    const cats = allCats(); if (r["категория"] && !cats.includes(r["категория"])) cats.push(r["категория"]);
-    tr.innerHTML = `<td><select data-k="категория" ${has ? "disabled title='У слова есть картинки — категорию не меняем, иначе сменятся адреса'" : ""}>
-        <option value="" ${!r["категория"] ? "selected" : ""}>— категория —</option>
-        ${cats.map(c => `<option value="${esc(c)}" ${r["категория"] === c ? "selected" : ""}>${esc(cap(c))}</option>`).join("")}
-        <option value="__new">➕ Новая категория…</option></select></td>
-      <td><input type="text" value="${esc(r["слово"])}" data-k="слово" ${has ? "disabled title='У слова есть картинки — переименовать нельзя'" : ""}></td>
-      <td><select data-k="варианты">${VOPTS.map(o => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select></td>
-      <td class="tg"><input type="text" value="${esc(r["теги"])}" data-k="теги" placeholder="синонимы через запятую"></td>`;
-    tr.querySelectorAll("[data-k]").forEach(inp => inp.oninput = inp.onchange = () => {
-      if (inp.value === "__new"){
-        const name = (prompt("Название новой категории:") || "").trim().toLowerCase();
-        if (!name){ inp.value = r["категория"]; return; }
-        if (!CATS.includes(name)) CATS.push(name);
-                const o = document.createElement("option"); o.value = name; o.textContent = cap(name);
-        inp.insertBefore(o, inp.lastElementChild); inp.value = name;
-      }
-      r[inp.dataset.k] = inp.value.trim(); r._chg = true; tr.className = r._new ? "nw" : "chg";
+    if (r._chg) tr.className = "chg";
+    tr.innerHTML = `<td>${esc(rowCats(r).map(cap).join(", ") || "—")}</td>
+      <td><b>${esc(cap(r["слово"]))}</b> <span class="muted">${n ? "· " + n + " карт." : "· нет картинок"}</span></td>
+      <td>${esc(rowVariants(r).join(", "))}</td>
+      <td class="tg" style="display:flex;gap:6px"><input type="text" value="${esc(r["теги"])}" data-k="теги" placeholder="синонимы через запятую">
+        <button class="sg" data-ed="1" title="Изменить всё">✎</button></td>`;
+    tr.querySelector("[data-k]").oninput = ev => {
+      r["теги"] = ev.target.value.trim(); r._chg = true; tr.className = "chg";
       dictDirty = true; $("dsavewrap").hidden = false;
-    });
+    };
+    tr.querySelector("[data-ed]").onclick = () => openEditor(r);
     body.appendChild(tr);
   });
 }
 $("dq").oninput = () => { clearTimeout(renderDict.t); renderDict.t = setTimeout(renderDict, 200); };
-$("dadd").onclick = () => {
-  DICT.unshift({"категория": "", "слово": "", "варианты": "девочка, мальчик", "теги": "", "комментарий": "", _new: true});
-  $("dq").value = ""; renderDict(); dictDirty = true; $("dsavewrap").hidden = false;
-  $("dbody").querySelector("input[data-k='категория']").focus();
-};
+$("dadd").onclick = () => openEditor(null);
 $("dsave").onclick = async () => {
-  const bad = DICT.find(r => (r._new || r._chg) && (!r["слово"] || !r["категория"]));
-  if (bad){ alert("У нового слова должны быть заполнены категория и слово."); return; }
-  const seen = new Set();
-  for (const r of DICT){ const k = norm(r["слово"]); if (seen.has(k)){ alert(`Слово «${r["слово"]}» записано дважды.`); return; } seen.add(k); }
   $("dsave").disabled = true; $("dsave").textContent = "Сохраняю…";
-  try {
-    DICT.forEach(r => { r["категория"] = r["категория"].toLowerCase(); r["слово"] = r["слово"].toLowerCase(); });
-    const sha = await commit([{path: "словарь.csv", b64: b64FromText(toCSV(DICT))}], "Админка: словарь");
-    DICT.forEach(r => { delete r._new; delete r._chg; });
-    dictDirty = false; $("dsavewrap").hidden = true; reindex(); renderDict(); renderLib();
-    watchRuns(sha);
-  } catch (e) { alert("Не получилось сохранить: " + e.message); }
-  $("dsave").disabled = false; $("dsave").textContent = "Сохранить словарь";
+  DICT.forEach(r => delete r._chg);
+  dictDirty = false; $("dsavewrap").hidden = true;
+  await saveFiles([], "Админка: синонимы");
+  $("dsave").disabled = false; $("dsave").textContent = "Сохранить синонимы";
 };
 addEventListener("beforeunload", e => { if (dictDirty || Q.length){ e.preventDefault(); e.returnValue = ""; } });
 

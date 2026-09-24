@@ -84,9 +84,10 @@ def to_png(src_bytes):
         return data, im.size, orig
 
 
-def convert(src_bytes, ext):
-    """-> (данные, новое_расширение, (w,h), исходный_размер, лимит)"""
-    if ext.lower() in TO_WEBP:
+def convert(src_bytes, ext, keep_ext=None):
+    """-> (данные, новое_расширение, (w,h), исходный_размер, лимит).
+    keep_ext='.png'/'.webp' — принудительно этот формат (при замене картинки адрес не меняется)."""
+    if keep_ext == ".webp" or (keep_ext is None and ext.lower() in TO_WEBP):
         d, size, orig = to_webp(src_bytes)
         return d, ".webp", size, orig, WEBP_LIMIT
     d, size, orig = to_png(src_bytes)
