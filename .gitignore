@@ -1,0 +1,10 @@
+_оригиналы/
+__pycache__/
+_python/
+*.pyc
+план.html
+новые/*
+!новые/ПРОЧТИТЕ.txt
+.DS_Store
+Thumbs.db
+desktop.ini

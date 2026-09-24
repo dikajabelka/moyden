@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лист для печати — Картинки «Мой день»</title>
+<meta name="theme-color" content="#6C5CE7">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236C5CE7'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23FFD166'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<style>
+  .opts{display:grid;gap:14px;background:#fff;border:1px solid var(--line);border-radius:18px;
+    padding:16px;margin:18px 0}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .row > b{width:100%;font-size:14px;color:var(--soft);font-weight:600}
+  .seg{padding:8px 14px;border-radius:12px;border:2px solid var(--line);background:#fff;
+    cursor:pointer;font-weight:600;font-size:14px}
+  .seg.on{background:var(--purple);border-color:var(--purple);color:#fff}
+  label.chk{display:flex;align-items:center;gap:8px;font-size:15px;cursor:pointer}
+  label.chk input{width:20px;height:20px;accent-color:var(--purple)}
+  .chosen{display:flex;gap:8px;overflow-x:auto;padding:4px 0 6px}
+  .ch{flex:none;width:86px;background:var(--bg);border:1px solid var(--line);border-radius:12px;
+    padding:6px;text-align:center;font-size:12px;position:relative}
+  .ch img{width:100%;height:52px;object-fit:contain}
+  .ch div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ch .ctl{display:flex;justify-content:space-between;margin-top:4px}
+  .ch button{border:0;background:#fff;border-radius:8px;width:24px;height:24px;cursor:pointer;
+    padding:0;font-size:14px;line-height:1}
+  .ch button:hover{background:var(--lav);color:var(--purple)}
+  .act{display:flex;gap:10px;flex-wrap:wrap}
+  .act .btn{width:auto;flex:1 1 220px;margin:0}
+  .hint{font-size:14px;color:var(--soft);margin:0}
+  .info{font-size:14px;color:var(--soft);margin:4px 0 12px}
+
+  /* ---------- лист A4 ---------- */
+  .sheets{display:flex;flex-direction:column;align-items:center;gap:18px}
+  .pg{zoom:var(--z,1);width:210mm;height:297mm;padding:10mm;background:#fff;
+    box-shadow:0 6px 24px rgba(31,41,55,.14);display:grid;overflow:hidden;flex:none}
+  .cell{border:0.4mm dashed #B8BCC8;margin:-0.2mm;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:4mm;min-width:0;min-height:0;gap:2mm}
+  .cell img{flex:1 1 auto;min-height:0;width:100%;object-fit:contain}
+  .cell .cap{font-weight:700;text-align:center;line-height:1.15;color:#111;
+    overflow:hidden;max-width:100%;word-break:break-word}
+  .cell.empty{border-color:#E5E7EE}
+  .pg.frames .cell > .inner{border:1mm solid var(--frame,#6C5CE7)}
+  .inner{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;border-radius:4mm;padding:3mm;gap:2mm;min-height:0}
+  .up .cap{text-transform:uppercase}
+  .cap-top .inner{flex-direction:column-reverse}
+
+  @page{size:A4 portrait;margin:0}
+  @media print{
+    body{background:#fff}
+    .top,.opts,footer,.info,.noprint{display:none !important}
+    .wrap{padding:0;max-width:none}
+    .sheets{gap:0;display:block}
+    .pg{zoom:1 !important;box-shadow:none;break-after:page;page-break-after:always;margin:0}
+    .pg:last-child{break-after:auto;page-break-after:auto}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <nav class="nav">
+    <a class="logo" href="index.html">
+      <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#fff" fill-opacity=".2"/><circle cx="16" cy="16" r="7" fill="#FFD166"/></svg>
+      <span>Мой день</span>
+    </a>
+    <a class="l" href="index.html">Картинки</a>
+    <a class="l on" href="print.html">Лист для печати</a>
+    <a class="l" href="about.html">О проекте</a>
+  </nav>
+  <h1>Лист для печати</h1>
+  <p>Выберите картинки на главной (кнопка ＋ на карточке) — здесь они соберутся в лист A4 с подписями.</p>
+</div></header>
+
+<main class="wrap">
+  <div class="opts" id="opts">
+    <div class="row"><b>Выбрано: <span id="cnt">0</span></b>
+      <div class="chosen" id="chosen" style="width:100%"></div>
+    </div>
+    <div class="row" id="lay"><b>Карточек на листе</b></div>
+    <div class="row" id="capw"><b>Подпись</b></div>
+    <div class="row"><b>Оформление</b>
+      <label class="chk"><input type="checkbox" id="up"> ЗАГЛАВНЫМИ</label>
+      <label class="chk"><input type="checkbox" id="frames" checked> Цветная рамка</label>
+      <label class="chk"><input type="checkbox" id="fill"> Повторять до заполнения листа</label>
+    </div>
+    <div class="act">
+      <button class="btn" id="print">Печать / сохранить в PDF</button>
+      <a class="btn ghost" href="index.html">← Выбрать картинки</a>
+    </div>
+    <p class="hint">В окне печати выберите принтер или «Сохранить как PDF». Размер — A4, масштаб 100 %,
+      поля — «нет» или «по умолчанию». На телефоне: меню браузера → «Печать» / «Поделиться» → «Печать».</p>
+  </div>
+
+  <div class="info" id="info"></div>
+  <div class="sheets" id="sheets"></div>
+</main>
+
+<footer>
+  Картинки можно бесплатно использовать для занятий с детьми и печати. Продавать нельзя.
+  <a href="about.html#rules">Подробнее</a> · <a href="https://t.me/dikaja_belka">@dikaja_belka</a>
+</footer>
+
+<script src="catalog.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const KEY = "mojden.sheet", OPT = "mojden.print";
+
+const LAYOUTS = [            // колонки × строки, размер подписи
+  {n:4,  c:2, r:2, f:"26pt"},
+  {n:6,  c:2, r:3, f:"22pt"},
+  {n:9,  c:3, r:3, f:"17pt"},
+  {n:12, c:3, r:4, f:"15pt"},
+  {n:20, c:4, r:5, f:"11pt"},
+];
+const CAPS = [["bottom","Снизу"],["top","Сверху"],["none","Без подписи"]];
+
+let BY_ID = {}, ids = [];
+let opt = {n:6, cap:"bottom", up:false, frames:true, fill:false};
+try { Object.assign(opt, JSON.parse(localStorage.getItem(OPT)) || {}); } catch (e) {}
+try { ids = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) {}
+
+// можно передать набор ссылкой: print.html#ids=еда_яблоко,люди_мама
+const fromHash = new URLSearchParams(location.hash.slice(1)).get("ids");
+if (fromHash) ids = fromHash.split(",").map(decodeURIComponent);
+
+(window.CATALOG ? Promise.resolve(window.CATALOG) : fetch("catalog.json").then(r => r.json()))
+  .then(d => {
+    (d.items || []).forEach(i => BY_ID[i.id] = i);
+    ids = ids.filter(id => BY_ID[id]);
+    controls(); draw();
+  })
+  .catch(() => { $("info").textContent = "Не удалось загрузить каталог."; });
+
+function store(){
+  try { localStorage.setItem(KEY, JSON.stringify(ids)); localStorage.setItem(OPT, JSON.stringify(opt)); } catch (e) {}
+}
+
+function seg(box, items, get, set){
+  box.querySelectorAll(".seg").forEach(b => b.remove());
+  items.forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "seg" + (get() === v ? " on" : "");
+    b.textContent = label;
+    b.onclick = () => { set(v); controls(); draw(); };
+    box.appendChild(b);
+  });
+}
+
+function controls(){
+  seg($("lay"), LAYOUTS.map(l => [l.n, `${l.n} (${l.c}×${l.r})`]), () => opt.n, v => opt.n = v);
+  seg($("capw"), CAPS, () => opt.cap, v => opt.cap = v);
+  $("up").checked = opt.up; $("frames").checked = opt.frames; $("fill").checked = opt.fill;
+  $("cnt").textContent = ids.length;
+  const box = $("chosen");
+  box.innerHTML = ids.length ? "" :
+    '<span class="hint">Пока ничего не выбрано. <a href="index.html">Перейти к картинкам</a></span>';
+  ids.forEach((id, k) => {
+    const i = BY_ID[id], el = document.createElement("div");
+    el.className = "ch";
+    el.innerHTML = `<img src="${esc(i.file)}" alt=""><div>${esc(i.title)}</div><small style="color:#6B7280">${esc([i.variant,i.style==="фото"?"фото":"",i.n>1?i.n:""].filter(Boolean).join(" "))}&nbsp;</small>
+      <div class="ctl"><button title="Левее" data-a="l">‹</button>
+      <button title="Убрать" data-a="x">✕</button><button title="Правее" data-a="r">›</button></div>`;
+    el.onclick = e => {
+      const a = e.target.dataset && e.target.dataset.a;
+      if (!a) return;
+      if (a === "x") ids.splice(k, 1);
+      if (a === "l" && k > 0) [ids[k-1], ids[k]] = [ids[k], ids[k-1]];
+      if (a === "r" && k < ids.length - 1) [ids[k+1], ids[k]] = [ids[k], ids[k+1]];
+      controls(); draw();
+    };
+    box.appendChild(el);
+  });
+  store();
+}
+["up","frames","fill"].forEach(k => $(k).onchange = e => { opt[k] = e.target.checked; store(); draw(); });
+
+const COLORS = ["#6C5CE7","#E17055","#00B894","#0984E3","#FDCB6E","#E84393","#00CEC9","#A29BFE"];
+
+function draw(){
+  const L = LAYOUTS.find(l => l.n === opt.n) || LAYOUTS[1];
+  const box = $("sheets");
+  box.innerHTML = "";
+  $("print").disabled = !ids.length;
+  if (!ids.length){ $("info").textContent = ""; return; }
+
+  let seq = ids.slice();
+  if (opt.fill && seq.length % L.n){
+    const need = Math.ceil(seq.length / L.n) * L.n;
+    for (let k = 0; seq.length < need; k++) seq.push(ids[k % ids.length]);
+  }
+  const pages = Math.ceil(seq.length / L.n);
+  $("info").textContent = `Листов A4: ${pages}. Пунктир — линия отреза.`;
+
+  for (let p = 0; p < pages; p++){
+    const pg = document.createElement("div");
+    pg.className = "pg" + (opt.frames ? " frames" : "") + (opt.up ? " up" : "") +
+      (opt.cap === "top" ? " cap-top" : "");
+    pg.style.gridTemplateColumns = `repeat(${L.c}, 1fr)`;
+    pg.style.gridTemplateRows = `repeat(${L.r}, 1fr)`;
+    for (let k = 0; k < L.n; k++){
+      const id = seq[p * L.n + k], cell = document.createElement("div");
+      cell.className = "cell" + (id ? "" : " empty");
+      if (id){
+        const i = BY_ID[id];
+        const color = COLORS[Math.max(0, ids.indexOf(id)) % COLORS.length];
+        cell.innerHTML = `<div class="inner" style="--frame:${color}">
+          <img src="${esc(i.file)}" alt="">
+          ${opt.cap === "none" ? "" : `<div class="cap" style="font-size:${L.f}">${esc(i.title)}</div>`}
+        </div>`;
+      }
+      pg.appendChild(cell);
+    }
+    box.appendChild(pg);
+  }
+  fit();
+}
+
+/* на экране лист уменьшается под ширину окна, при печати — натуральный размер */
+function fit(){
+  const mm = 96 / 25.4, w = 210 * mm;
+  const z = Math.min(1, ($("sheets").clientWidth - 2) / w);
+  document.querySelectorAll(".pg").forEach(p => p.style.setProperty("--z", z.toFixed(3)));
+}
+addEventListener("resize", fit);
+
+$("print").onclick = () => {
+  const imgs = [...document.querySelectorAll(".pg img")];
+  Promise.all(imgs.map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })))
+    .then(() => window.print());
+};
+</script>
+</body>
+</html>

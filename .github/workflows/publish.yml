@@ -1,0 +1,66 @@
+# Сборка и публикация сайта.
+# Запускается сам, когда в репозиторий что-то загружено (например, из админки).
+# 1) разбирает папку «новые» (build.py), 2) сохраняет результат, 3) выкладывает сайт.
+name: Сборка и публикация
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Картинки → каталог
+        run: |
+          pip install -q pillow
+          python build.py
+
+      - name: Сохранить результат в репозиторий
+        run: |
+          git config user.name "Сборщик сайта"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -q -m "Сборка: $(date -u +'%Y-%m-%d %H:%M')"
+            git pull -q --rebase origin main
+            git push -q origin HEAD:main
+          fi
+
+      - name: Собрать файлы сайта
+        run: |
+          mkdir _site
+          rsync -a \
+            --exclude '.git*' --exclude '.github' --exclude 'новые' --exclude '_оригиналы' \
+            --exclude '_python' --exclude '_site' --exclude '*.py' --exclude '*.cmd' \
+            --exclude '*.md' --exclude 'план.html' --exclude '__pycache__' \
+            ./ _site/
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

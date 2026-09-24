@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>О проекте — Картинки «Мой день»</title>
+<meta name="theme-color" content="#6C5CE7">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236C5CE7'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23FFD166'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <nav class="nav">
+    <a class="logo" href="index.html">
+      <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#fff" fill-opacity=".2"/><circle cx="16" cy="16" r="7" fill="#FFD166"/></svg>
+      <span>Мой день</span>
+    </a>
+    <a class="l" href="index.html">Картинки</a>
+    <a class="l" href="print.html">Лист для печати</a>
+    <a class="l on" href="about.html">О проекте</a>
+  </nav>
+  <h1>О проекте</h1>
+  <p>Картинки для визуального расписания и общения карточками</p>
+  <div class="stat" id="stat"></div>
+</div></header>
+
+<main class="page">
+  <p>«Мой день» — Android-приложение для детей с аутизмом и особенностями развития.
+    Оно помогает ребёнку видеть, что будет дальше (визуальное расписание),
+    и показывать, чего он хочет (общение карточками).</p>
+  <p>На этом сайте собраны картинки для таких карточек. Их рисует автор приложения,
+    коллекция постоянно пополняется.</p>
+
+  <h2>Для кого</h2>
+  <div class="box"><ul>
+    <li><b>Родители</b> — чтобы сделать расписание дня или карточки «хочу / не хочу» дома;</li>
+    <li><b>Специалисты</b> — дефектологи, логопеды, АВА-терапевты, психологи, педагоги;</li>
+    <li><b>Школы, сады, центры</b> — для расписаний в классе и наглядных инструкций.</li>
+  </ul></div>
+
+  <h2>Как пользоваться</h2>
+  <div class="box"><ul>
+    <li>Найдите картинку поиском или по категории и нажмите на неё — откроется окно со скачиванием. У многих слов есть варианты: с девочкой, с мальчиком, без людей. Фильтр вверху запоминает ваш выбор.</li>
+    <li>Чтобы распечатать карточки, нажимайте <b>＋</b> на нужных картинках, затем
+      «<a href="print.html">Собрать лист</a>». Получится лист A4 с подписями и линиями отреза —
+      его можно напечатать или сохранить в PDF.</li>
+    <li>В приложении «Мой день» картинки из этой библиотеки доступны прямо при создании карточки.</li>
+  </ul></div>
+
+  <h2 id="rules">Условия использования</h2>
+  <div class="box">
+    <p style="margin-top:0">Все картинки на сайте нарисованы автором, авторские права принадлежат автору.
+      Картинки предоставляются бесплатно на следующих условиях.</p>
+    <p><b>Можно:</b></p>
+    <ul class="yes">
+      <li>использовать дома, в школе, в саду, в центре, на частных и групповых занятиях — в том числе платных;</li>
+      <li>печатать, ламинировать, делать из них расписания, карточки и пособия для своих занятий;</li>
+      <li>раздавать распечатки ученикам и родителям бесплатно;</li>
+      <li>использовать в приложении «Мой день».</li>
+    </ul>
+    <p><b>Нельзя без письменного разрешения автора:</b></p>
+    <ul class="no">
+      <li>продавать картинки, распечатки, наборы и пособия с ними — в том числе в составе «своих» наборов;</li>
+      <li>выкладывать картинки в другие библиотеки, банки изображений, наборы символов;</li>
+      <li>использовать в других приложениях, сайтах, программах и нейросетях (в том числе для обучения);</li>
+      <li>выдавать картинки за свои или убирать указание автора.</li>
+    </ul>
+    <p style="margin-bottom:0">Если хотите использовать картинки иначе — напишите, скорее всего договоримся.</p>
+  </div>
+
+  <h2>Связаться с автором</h2>
+  <div class="box">
+    Telegram: <a href="https://t.me/dikaja_belka">@dikaja_belka</a><br>
+    Пишите, какой картинки не хватает, — коллекция растёт по вашим просьбам.
+  </div>
+
+  <h2>Для разработчиков</h2>
+  <div class="box">
+    Машинный каталог: <code id="curl">catalog.json</code><br>
+    Формат: <code>items[]</code> с полями <code>id, title, category, file, bytes, tags, word, variant, style, n</code>. Картинки одного слова объединяются по <code>word</code>.
+    Адреса картинок не меняются при обновлении коллекции.
+    Использование каталога в сторонних приложениях — только с разрешения автора.
+  </div>
+</main>
+
+<footer>© <span id="y">2026</span> Автор «Мой день» · <a href="https://t.me/dikaja_belka">@dikaja_belka</a></footer>
+
+<script src="catalog.js"></script>
+<script>
+  document.getElementById("y").textContent = new Date().getFullYear();
+  if (location.protocol.startsWith("http"))
+    document.getElementById("curl").textContent = new URL("catalog.json", location.href).href;
+  const d = window.CATALOG;
+  if (d){
+    const upd = d.updated ? new Date(d.updated + "T00:00:00").toLocaleDateString("ru-RU",
+      {day:"numeric", month:"long", year:"numeric"}) : "";
+    document.getElementById("stat").textContent =
+      `В коллекции ${d.count} картинок` + (upd ? ` · обновлено ${upd}` : "");
+  }
+</script>
+</body>
+</html>
