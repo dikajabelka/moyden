@@ -37,13 +37,14 @@
     box-shadow:0 6px 24px rgba(31,41,55,.14);display:grid;overflow:hidden;flex:none}
   .cell{border:0.4mm dashed #B8BCC8;margin:-0.2mm;display:flex;flex-direction:column;
     align-items:center;justify-content:center;padding:4mm;min-width:0;min-height:0;gap:2mm}
-  .cell img{flex:1 1 auto;min-height:0;width:100%;object-fit:contain}
-  .cell .cap{font-weight:700;text-align:center;line-height:1.15;color:#111;
-    overflow:hidden;max-width:100%;word-break:break-word}
+  .cell img{flex:1 1 0;min-height:0;height:0;width:100%;object-fit:contain;display:block}
+  .cell .cap{flex:0 0 auto;align-self:stretch;font-weight:700;text-align:center;line-height:1.35;color:#111;
+    overflow:visible;white-space:normal;max-width:100%;min-height:1.5em;word-break:normal;overflow-wrap:anywhere;
+    padding:1mm 1mm 1.5mm}
   .cell.empty{border-color:#E5E7EE}
   .pg.frames .cell > .inner{border:1mm solid var(--frame,#6C5CE7)}
   .inner{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;border-radius:4mm;padding:3mm;gap:2mm;min-height:0}
+    justify-content:center;border-radius:4mm;padding:3mm;gap:2mm;min-height:0;min-width:0;overflow:hidden}
   .up .cap{text-transform:uppercase}
   .cap-top .inner{flex-direction:column-reverse}
 

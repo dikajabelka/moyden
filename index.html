@@ -33,6 +33,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
       <input type="search" id="q" placeholder="Поиск: яблоко, мама, гулять…" autocomplete="off" enterkeyhint="search" aria-label="Поиск картинок">
     </div>
+    <div class="filt" id="filt" aria-label="Фильтры картинок"></div>
     <div class="cats" id="cats" role="tablist"></div>
   </div>
 
@@ -53,9 +54,12 @@
   <h3 id="dtitle"></h3>
   <div class="sub" id="dsub"></div>
   <div class="tags" id="dtags"></div>
+  <div class="vars" id="dvars" aria-label="Варианты изображения"></div>
   <a class="btn" id="ddl" download>Скачать картинку</a>
   <button class="btn ghost" id="dpick">Добавить в лист для печати</button>
-  <button class="btn ghost" id="dclose">Закрыть</button>
+  <button class="btn ghost" id="dpng">Скачать как PNG</button>
+  <p class="muted" id="dnote" hidden></p>
+  <button class="btn ghost" id="dx">Закрыть</button>
 </div></dialog>
 
 <footer>
@@ -65,213 +69,6 @@
 </footer>
 
 <script src="catalog.js"></script>
-<script>
-"use strict";
-const $ = id => document.getElementById(id);
-const norm = s => (s || "").toLowerCase().replace(/ё/g, "е");
-const esc = s => String(s).replace(/[&<>"']/g, c =>
-  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const STEP = 120;                 // сколько карточек дорисовывать за раз
-const KEY = "mojden.sheet";
-
-let ALL = [], BY_ID = {}, cat = "", q = "", list = [], shown = 0;
-let picked = [];
-try { picked = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) {}
-
-/* ---------- загрузка каталога ----------
-   catalog.js работает и при открытии из папки (file://),
-   catalog.json — запасной путь на сервере. */
-(window.CATALOG ? Promise.resolve(window.CATALOG)
-  : fetch("catalog.json").then(r => r.json()))
-  .then(init)
-  .catch(() => { $("count").textContent =
-    "Не удалось загрузить каталог. Запустите build.py и обновите страницу."; });
-
-function init(d){
-  ALL = (d.items || []).map(i => {
-    i._t = norm(i.title);
-    i._g = (i.tags || []).map(norm);
-    i._c = norm(i.category);
-    BY_ID[i.id] = i;
-    return i;
-  });
-  picked = picked.filter(id => BY_ID[id]);
-  save();
-
-  const upd = d.updated ? new Date(d.updated + "T00:00:00").toLocaleDateString("ru-RU",
-    {day:"numeric", month:"long", year:"numeric"}) : "";
-  $("stat").innerHTML = `<span>🖼 ${ALL.length} ${plural(ALL.length,"картинка","картинки","картинок")}</span>`
-    + (upd ? `<span>обновлено ${upd}</span>` : "");
-
-  buildCats(d.categories || []);
-  readHash();
-  render();
-}
-
-function plural(n, a, b, c){
-  const m10 = n % 10, m100 = n % 100;
-  return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c;
-}
-
-/* ---------- категории ---------- */
-function buildCats(cats){
-  const box = $("cats"), counts = {};
-  ALL.forEach(i => counts[i.category] = (counts[i.category] || 0) + 1);
-  const mk = (id, name, n) => {
-    const b = document.createElement("button");
-    b.className = "cat"; b.dataset.c = id; b.setAttribute("role", "tab");
-    b.innerHTML = esc(name) + `<small>${n}</small>`;
-    b.onclick = () => { cat = id; render(); writeHash(); };
-    box.appendChild(b);
-  };
-  mk("", "Все", ALL.length);
-  cats.forEach(c => mk(c, c, counts[c] || 0));
-}
-
-/* ---------- поиск ----------
-   Каждое слово запроса должно найтись в названии, тегах или категории.
-   Сверху — совпадения по началу названия, потом по тегам. */
-let timer;
-$("q").addEventListener("input", e => {
-  clearTimeout(timer);
-  timer = setTimeout(() => { q = e.target.value; render(); writeHash(); }, 120);
-});
-
-function score(i, words){
-  let s = 0;
-  for (const w of words){
-    if (i._t.startsWith(w)) s += 0;
-    else if (i._t.includes(" " + w)) s += 1;
-    else if (i._g.includes(w)) s += 2;
-    else if (i._g.some(t => t.startsWith(w))) s += 3;
-    else if (i._t.includes(w)) s += 4;
-    else if (i._g.some(t => t.includes(w))) s += 5;
-    else if (i._c.startsWith(w)) s += 6;
-    else return -1;
-  }
-  return s;
-}
-
-function render(){
-  document.querySelectorAll(".cat").forEach(b => {
-    const on = b.dataset.c === cat;
-    b.classList.toggle("on", on); b.setAttribute("aria-selected", on);
-  });
-  const words = norm(q).trim().split(/\s+/).filter(Boolean);
-  let pool = cat ? ALL.filter(i => i.category === cat) : ALL;
-  if (words.length){
-    pool = pool.map(i => [score(i, words), i]).filter(x => x[0] >= 0)
-      .sort((a, b) => a[0] - b[0] || a[1]._t.localeCompare(b[1]._t, "ru"))
-      .map(x => x[1]);
-  }
-  list = pool;
-  $("count").textContent = list.length
-    ? (list.length === ALL.length ? `Все картинки: ${ALL.length}` : `Найдено: ${list.length} из ${ALL.length}`)
-    : "";
-  $("empty").hidden = list.length > 0;
-  if (!list.length) $("empty").innerHTML = words.length
-    ? `По запросу <b>«${esc(q.trim())}»</b> ничего не нашлось.<br>Попробуйте другое слово или
-       <a href="https://t.me/dikaja_belka">попросите автора</a> нарисовать такую картинку.`
-    : "В этой категории пока пусто.";
-  $("grid").innerHTML = "";
-  shown = 0;
-  more();
-}
-
-function more(){
-  const frag = document.createDocumentFragment();
-  const end = Math.min(shown + STEP, list.length);
-  for (let n = shown; n < end; n++) frag.appendChild(card(list[n]));
-  shown = end;
-  $("grid").appendChild(frag);
-}
-new IntersectionObserver(e => { if (e[0].isIntersecting && shown < list.length) more(); },
-  {rootMargin: "600px"}).observe($("more"));
-
-const PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
-const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>';
-
-function card(i){
-  const d = document.createElement("div");
-  const on = picked.includes(i.id);
-  d.className = "card" + (on ? " sel" : "");
-  d.dataset.id = i.id;
-  d.tabIndex = 0;
-  d.innerHTML = `<img src="${esc(i.file)}" alt="${esc(i.title)}" loading="lazy" decoding="async">
-    <div class="t">${esc(i.title)}</div>
-    <div class="c">${esc(i.category || "без категории")}</div>
-    <button class="pick" title="В лист для печати" aria-label="В лист для печати">${on ? TICK : PLUS}</button>`;
-  d.onclick = e => { if (e.target.closest(".pick")) toggle(i.id); else openItem(i); };
-  d.onkeydown = e => { if (e.key === "Enter") openItem(i); };
-  return d;
-}
-
-/* ---------- лист для печати ---------- */
-function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(picked)); } catch (e) {}
-  $("bn").textContent = picked.length;
-  $("bar").classList.toggle("show", picked.length > 0);
-}
-function toggle(id){
-  const k = picked.indexOf(id);
-  if (k >= 0) picked.splice(k, 1); else picked.push(id);
-  save();
-  const el = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  if (el){
-    const on = picked.includes(id);
-    el.classList.toggle("sel", on);
-    el.querySelector(".pick").innerHTML = on ? TICK : PLUS;
-  }
-  if (cur && cur.id === id) pickLabel();
-}
-$("bclear").onclick = () => {
-  picked = []; save();
-  document.querySelectorAll(".card.sel").forEach(el => {
-    el.classList.remove("sel"); el.querySelector(".pick").innerHTML = PLUS;
-  });
-};
-
-/* ---------- окно картинки ---------- */
-let cur = null;
-function openItem(i){
-  cur = i;
-  $("dimg").src = i.file; $("dimg").alt = i.title;
-  $("dtitle").textContent = i.title;
-  const ext = (i.file.split(".").pop() || "").toUpperCase();
-  $("dsub").textContent = [i.category || "без категории", ext,
-    i.w ? `${i.w}×${i.h}` : "", Math.max(1, Math.round(i.bytes / 1024)) + " КБ"]
-    .filter(Boolean).join(" · ");
-  $("dtags").innerHTML = (i.tags || []).map(t => `<span>${esc(t)}</span>`).join("");
-  $("dtags").querySelectorAll("span").forEach(s => s.onclick = () => {
-    $("q").value = q = s.textContent; cat = ""; $("dlg").close(); render(); writeHash();
-  });
-  const a = $("ddl");
-  a.href = i.file;
-  a.setAttribute("download", i.title + "." + ext.toLowerCase());
-  pickLabel();
-  $("dlg").showModal();
-}
-function pickLabel(){
-  $("dpick").textContent = picked.includes(cur.id) ? "✓ В листе — убрать" : "Добавить в лист для печати";
-}
-$("dpick").onclick = () => toggle(cur.id);
-$("dclose").onclick = () => $("dlg").close();
-$("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").close(); });
-
-/* ---------- адрес страницы хранит поиск: можно поделиться ссылкой ---------- */
-function writeHash(){
-  const p = new URLSearchParams();
-  if (q.trim()) p.set("q", q.trim());
-  if (cat) p.set("c", cat);
-  const h = p.toString();
-  history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
-}
-function readHash(){
-  const p = new URLSearchParams(location.hash.slice(1));
-  q = p.get("q") || ""; cat = p.get("c") || "";
-  if (cat && !ALL.some(i => i.category === cat)) cat = "";
-  $("q").value = q;
-}
-</script>
+<script src="app.js"></script>
 </body>
 </html>

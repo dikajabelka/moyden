@@ -157,6 +157,7 @@
       <button class="tab" data-t="lib">Картинки и план</button>
       <button class="tab" data-t="dict">Словарь</button>
       <button class="tab" data-t="rep">Сборка</button>
+      <button class="tab" data-t="stories">Социальные истории</button>
     </div>
 
     <div id="gstatus"></div>
@@ -204,6 +205,27 @@
       </div>
     </section>
 
+    <!-- СОЦИАЛЬНЫЕ ИСТОРИИ -->
+    <section id="s-stories">
+      <div class="panel">
+        <h2 style="margin-top:0">Социальные истории</h2>
+        <p class="muted">Одна история — один готовый рисунок с несколькими шагами. Исходный размер сохраняется для качественной печати.</p>
+        <label class="f" for="story-title">Название истории</label>
+        <input id="story-title" type="text" placeholder="Например, Чистить зубы">
+        <label class="f" for="story-tags">Теги для поиска (через запятую)</label>
+        <input id="story-tags" type="text" placeholder="зубы, щётка, гигиена">
+        <label class="f" for="story-image">Готовая картинка (PNG, JPG, WEBP)</label>
+        <input id="story-image" type="file" accept="image/png,image/jpeg,image/webp" style="display:block;margin:10px 0 16px;max-width:100%">
+        <button id="story-add" class="btn">Загрузить историю</button>
+        <p id="story-status" class="muted" role="status" aria-live="polite"></p>
+      </div>
+      <div class="panel">
+        <h3 style="margin-top:0">Добавленные истории</h3>
+        <input id="story-search" type="search" placeholder="Поиск по историям" style="margin-bottom:12px">
+        <div id="story-items"></div>
+      </div>
+    </section>
+
     <!-- СБОРКА -->
     <section id="s-rep">
       <div class="panel" id="rep"></div>
@@ -215,5 +237,6 @@
 </main>
 
 <script src="admin.js"></script>
+<script src="stories-admin.js"></script>
 </body>
 </html>
