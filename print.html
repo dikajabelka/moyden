@@ -68,6 +68,7 @@
       <span>Мой день</span>
     </a>
     <a class="l" href="index.html">Картинки</a>
+    <a class="l" href="stories.html">Социальные истории</a>
     <a class="l on" href="print.html">Лист для печати</a>
     <a class="l" href="about.html">О проекте</a>
   </nav>
@@ -164,7 +165,7 @@ function controls(){
   ids.forEach((id, k) => {
     const i = BY_ID[id], el = document.createElement("div");
     el.className = "ch";
-    el.innerHTML = `<img src="${esc(i.file)}" alt=""><div>${esc(i.title)}</div><small style="color:#6B7280">${esc([i.variant,i.style==="фото"?"фото":"",i.n>1?i.n:""].filter(Boolean).join(" "))}&nbsp;</small>
+    el.innerHTML = `<img src="${esc(i.file)}" alt=""><div>${esc(i.title)}</div>
       <div class="ctl"><button title="Левее" data-a="l">‹</button>
       <button title="Убрать" data-a="x">✕</button><button title="Правее" data-a="r">›</button></div>`;
     el.onclick = e => {
