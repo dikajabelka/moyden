@@ -1,1 +1,1 @@
-window.STORY_CATALOG={"version":1,"name":"Социальные истории","updated":"2026-11-08","count":0,"items":[]};
+window.STORY_CATALOG={"version":1,"name":"Социальные истории","updated":"2026-11-08","count":1,"items":[{"id":"story-mw8drp06-eyqao","title":"Чистить зубы","file":"images/story-mw8drp06-eyqao.png","bytes":1926479,"tags":["зубы","щетка","гигиена","чистка зубов"]}]};
