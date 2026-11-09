@@ -3,7 +3,7 @@
  "name": "Картинки «Мой день»",
  "count": 96,
  "updated": "2026-11-09",
- "words": 65,
+ "words": 64,
  "categories": [
   "гигиена",
   "главная",
@@ -1177,7 +1177,7 @@
   },
   {
    "id": "места_яркий_пункт_выдачи_wildberries_и_ozon",
-   "title": "Яркий пункт выдачи wildberries и ozon",
+   "title": "Wb ozon",
    "category": "места",
    "categories": [
     "места"
@@ -1192,7 +1192,7 @@
     "озон",
     "ozon"
    ],
-   "word": "яркий пункт выдачи wildberries и ozon",
+   "word": "wb ozon",
    "variant": "без людей",
    "style": "рисунок",
    "n": 1,
