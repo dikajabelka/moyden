@@ -1,8 +1,8 @@
 {
   "version": 1,
   "name": "Социальные истории",
-  "updated": "2026-11-08",
-  "count": 2,
+  "updated": "2026-11-10",
+  "count": 3,
   "items": [
     {
       "id": "story-mw8drp06-eyqao",
@@ -27,6 +27,17 @@
         "гигиена",
         "чистка зубов",
         "мальчик"
+      ]
+    },
+    {
+      "id": "story-mwafuxbz-ug1rk",
+      "title": "У стоматолога - часть 1/3",
+      "file": "images/story-mwafuxbz-ug1rk.png",
+      "bytes": 2029482,
+      "tags": [
+        "стоматолог",
+        "врач",
+        "поликлиника"
       ]
     }
   ]
