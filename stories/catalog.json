@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Социальные истории",
   "updated": "2026-11-10",
-  "count": 3,
+  "count": 4,
   "items": [
     {
       "id": "story-mw8drp06-eyqao",
@@ -34,6 +34,17 @@
       "title": "У стоматолога - часть 1/3",
       "file": "images/story-mwafuxbz-ug1rk.png",
       "bytes": 2029482,
+      "tags": [
+        "стоматолог",
+        "врач",
+        "поликлиника"
+      ]
+    },
+    {
+      "id": "story-mwafwmsx-mf7ao",
+      "title": "У стоматолога - часть 2/3",
+      "file": "images/story-mwafwmsx-mf7ao.png",
+      "bytes": 2001035,
       "tags": [
         "стоматолог",
         "врач",
